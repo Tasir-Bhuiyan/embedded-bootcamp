@@ -19,6 +19,8 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "spi.h"
+#include "tim.h"
 #include "usart.h"
 #include "gpio.h"
 
@@ -87,7 +89,10 @@ int main(void)
   /* Initialize all configured peripherals */
   MX_GPIO_Init();
   MX_USART2_UART_Init();
+  MX_SPI1_Init();
+  MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
+  HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
 
   /* USER CODE END 2 */
 
@@ -98,6 +103,31 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
+	  	 uint8_t toADCData[2]; //creates a 8 bit byte to send data to ADC.
+	  	 uint8_t fromADCData[2]; //ADC runs on 10 bits but MCU only on 8 so a larger array is needed to accomodate
+	  	 uint16_t adcValue; //10 bit value from ADC use 16 bit because 8 is too small
+	  	 uint32_t PWMvalue; //value to measure ticks for PWM
+
+	  	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_8, GPIO_PIN_RESET); // opens communications for the SPI and ADC
+
+	  	HAL_SPI_TransmitReceive(&hspi1, toADCData, fromADCData, 2, 100);
+	  	// send and recieve data from ADC
+	  	//address, send byte, recieved byte, # of bytes, timout time
+
+	  	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_8, GPIO_PIN_SET); // end communication
+
+	  	adcValue = ((fromADCData[0] & 0x03) << 8) | fromADCData[1];
+		// ADC only works in 10 bit but we recieved data in two 8 bit pieces
+		// the [0] contains the left two most bits that we care about
+		// the & operator is a bitwise comparator that will cut off all but the first two bits
+		// the << 8 will move them 8 spots to there correct spots in a 10 bit number
+		// the | will conjoin the rest of the number from [1] into the 10 bit number
+
+		PWMvalue = 3200 + ((adcValue * (6400 - 3200)) / 1023);
+		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, PWMvalue);
+		HAL_Delay(10);
+
+
   }
   /* USER CODE END 3 */
 }
