@@ -93,6 +93,26 @@ int main(void)
   MX_TIM1_Init();
   /* USER CODE BEGIN 2 */
   HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
+  	  	  uint8_t txData[2]; //creates a 8 bit byte to send data to ADC.
+  	  	txData[0] = 0b00000001;                   // start byte
+  	  	txData[1] = 0b10000000;                   // channel 0 has configuration 1000 0000 which equals 0x80 in hexidecimal
+  	    txData[2] = 0b00000000;       			// dummy
+
+
+
+
+ 	  	 uint8_t rxData[3]; //ADC runs on 10 bits but MCU only on 8 so a larger array is needed to accomodate
+ 	  	 uint16_t adcValue; //10 bit value from ADC use 16 bit because 8 is too small
+ 	  	 uint32_t PWMvalue; //value to measure ticks for PWM
+		#define SPI_TIMEOUT 100U
+		#define txLength sizeof(txData)
+		#define PWM_MIN 3200U
+		#define PWM_MAX 6400U
+		#define ADC_MAX 1023U
+
+
+
+
 
   /* USER CODE END 2 */
 
@@ -103,27 +123,34 @@ int main(void)
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
-	  	 uint8_t toADCData[2]; //creates a 8 bit byte to send data to ADC.
-	  	 uint8_t fromADCData[2]; //ADC runs on 10 bits but MCU only on 8 so a larger array is needed to accomodate
-	  	 uint16_t adcValue; //10 bit value from ADC use 16 bit because 8 is too small
-	  	 uint32_t PWMvalue; //value to measure ticks for PWM
 
-	  	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_8, GPIO_PIN_RESET); // opens communications for the SPI and ADC
 
-	  	HAL_SPI_TransmitReceive(&hspi1, toADCData, fromADCData, 2, 100);
-	  	// send and recieve data from ADC
-	  	//address, send byte, recieved byte, # of bytes, timout time
+	  HAL_GPIO_WritePin(GPIOB, GPIO_PIN_8, GPIO_PIN_RESET); // opens communications for the SPI and ADC
+
+	  // send and receive data from ADC
+	  //address, send byte, received byte, # of bytes, timeout time
+	  //also creates a variable to check if transmission was successful
+
+	  HAL_StatusTypeDef status = HAL_SPI_TransmitReceive(&hspi1, txData, rxData, txLength, SPI_TIMEOUT);
+	      if (status != HAL_OK)
+	      {
+	          Error_Handler();
+	      }
+
+
 
 	  	HAL_GPIO_WritePin(GPIOB, GPIO_PIN_8, GPIO_PIN_SET); // end communication
 
-	  	adcValue = ((fromADCData[0] & 0x03) << 8) | fromADCData[1];
-		// ADC only works in 10 bit but we recieved data in two 8 bit pieces
+
+	  	adcValue = ((rxData[1] & 0x03) << 8) | rxData[2];
+
+		// ADC only works in 10 bit but we received data in two 8 bit pieces
 		// the [0] contains the left two most bits that we care about
 		// the & operator is a bitwise comparator that will cut off all but the first two bits
 		// the << 8 will move them 8 spots to there correct spots in a 10 bit number
 		// the | will conjoin the rest of the number from [1] into the 10 bit number
 
-		PWMvalue = 3200 + ((adcValue * (6400 - 3200)) / 1023);
+		PWMvalue = PWM_MIN + ((adcValue * (PWM_MAX - PWM_MIN)) / ADC_MAX);
 		__HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, PWMvalue);
 		HAL_Delay(10);
 
